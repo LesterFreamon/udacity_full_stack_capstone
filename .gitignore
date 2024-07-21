@@ -132,7 +132,6 @@ venv.bak/
 
 # ai model
 ai_model/
-
 notebooks/
 
 # Spyder project settings
