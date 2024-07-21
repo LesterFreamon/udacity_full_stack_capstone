@@ -1,0 +1,120 @@
+
+.row {
+    display: flex;
+    align-items: start;
+    justify-content: center;
+}
+
+.gallery {
+    display: flex;
+    flex-direction: column;  /* Align children vertically inside each gallery */
+    gap: 10px;
+    padding: 10px;
+}
+
+.image-container {
+    width: 100%;  /* Ensure image containers fill their parent */
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.image-container img {
+    width: 100%;  /* Make images responsive */
+    height: auto;
+    border-radius: 5px;
+}
+
+.controls {
+    margin-top: 10px;
+    text-align: center;
+}
+.drop-area {
+    border: 2px dashed #007bff;
+    height: 100px;  /* Height of the drop area */
+    display: flex;
+    flex-grow: 1;
+    align-items: center;  /* Vertically center content */
+    justify-content: center;  /* Horizontally center content */
+    text-align: center;
+    padding: 10px;  /* Optional: add padding to ensure content does not touch the borders */
+    border-radius: 5px;
+    margin: 10px;  /* Optional: add some margin if it is within another container */
+    width: 100%;  /* Ensure it takes full width of its container */
+}
+.drop-area .row {
+    width: 60%;
+}
+
+.drop-area.hover {
+    background-color: #f0f0f0;
+}
+.info {
+    font-size: 0.9rem;
+    color: #666;
+    text-align: center;
+    margin-top: 5px;
+}
+
+.loader {
+    border: 6px solid #f3f3f3; /* Light grey */
+    border-top: 6px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+
+/* login page*/
+
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.login-container {
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+input[type="text"],
+input[type="password"] {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    display: inline-block;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #4CAF50;
+    color: white;
+    padding: 14px 20px;
+    margin: 8px 0;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+button:hover {
+    opacity: 0.8;
+}
+
+a {
+    color: dodgerblue;
+}

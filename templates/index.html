@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Image Processor with SAM{% endblock %}
+
+{% block head %}
+{% endblock %}
+
+
+{% block content %}
+<nav class="navbar fixed-top navbar-expand-sm navbar-light bg-light">
+    <a class="navbar-brand" href="#">SAM Image Processor</a>
+    <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav mr-auto col-6">
+            {% if current_user.is_authenticated %}
+            <li class="nav-item">
+                <a class="nav-link" href="#">Hello, {{ current_user.username }}, with the roles
+                    {% for role in current_user.roles %}
+                    {{ role.name }}
+                    {% endfor %}
+
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+            </li>
+            {% else %}
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</nav>
+
+<div class="container mt-10">
+    <h1 class="text-center">Image Processor with SAM</h1>
+    <p class="text-center">Drag and drop an image to segment it</p>
+    <div class="drop-area" id="drop-area">
+        <input type="file" id="fileElem" multiple accept="image/*" style="display:none"
+               onchange="handleFiles(this.files)">
+        <div class="row p-0 m-0">
+            <div class="col-8">
+                <p>Drag an image here, or click select file</p>
+            </div>
+            <div class="col-4">
+                <label class="btn btn-primary" for="fileElem">Select File</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mt-5">
+        <h1 class="text-center">Image Management</h1>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h4 class="text-center">Select an Image</h4>
+                <select id="imageDropdown" class="form-select">
+                    <option value="">Select an image...</option>
+                    <!-- Options will be added dynamically -->
+                </select>
+                <div class="d-flex justify-content-around mt-3">
+                    <button id="showButton" class="btn btn-primary" onclick="showSelectedImage()">Show Image</button>
+                    <button id="deleteButton" class="btn btn-danger" onclick="deleteSelectedImage()">Delete Image
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="row m-3">
+        <div class="col-6">Original Image
+            <div class="gallery" id="original-gallery"></div>
+            <button class="btn btn-outline-secondary" onclick="applySam()">Segment Image</button>
+        </div>
+        <div class="col-6">Segmented Image
+            <div class="gallery" id="segmented-gallery"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
