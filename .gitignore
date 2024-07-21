@@ -130,6 +130,11 @@ ENV/
 env.bak/
 venv.bak/
 
+# ai model
+ai_model/
+
+notebooks/
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -161,11 +166,6 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea/
 .DS_Store
-
-# ai model
-ai_model/
-
-notebooks/
 
 
 
