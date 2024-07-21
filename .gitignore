@@ -163,7 +163,7 @@ cython_debug/
 .DS_Store
 
 # ai model
-ai_model/*
+ai_model/
 
 
 
