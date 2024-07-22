@@ -45,7 +45,7 @@ segment-anything @ git+https://github.com/facebookresearch/segment-anything.git@
 six==1.16.0
 SQLAlchemy==2.0.31
 sympy==1.13.0
-torch==2.2.2
-torchvision==0.17.2
+torch==2.2.2+cpu -f https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.17.2+cpu -f https://download.pytorch.org/whl/torch_stable.html
 typing_extensions==4.12.2
 Werkzeug==3.0.3
