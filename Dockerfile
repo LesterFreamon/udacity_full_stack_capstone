@@ -1,6 +1,11 @@
 # Use an official Python runtime as a parent image bla
 FROM python:3.10-slim
 
+RUN apt-get update && apt-get install -y \
+    git \
+    libgl1-mesa-glx
+
+
 # Set the working directory in the container
 WORKDIR /app
 
@@ -8,7 +13,7 @@ WORKDIR /app
 COPY . /app
 
 # Install any needed packages specified in requirements.txt
-RUN pip install --trusted-host pypi.python.org -r requirements.txt
+RUN pip install -r requirements.txt
 
 # Make port available to the world outside this container
 EXPOSE 5000
