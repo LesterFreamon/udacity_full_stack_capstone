@@ -14,7 +14,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import Config
 from models import db, Image, ImageSegment, User, Role, init_roles  # Import db and Image from models.py
-from auth import setup_security, admin_permission, admin_or_user_permission  # Import setup_security and permissions from auth.py
+from auth import setup_security, admin_permission, \
+    admin_or_user_permission  # Import setup_security and permissions from auth.py
 from utils import create_segmentation_layer, create_rgba_image, combine_two_images
 
 # add logger
@@ -38,6 +39,7 @@ login_manager.login_view = '/login'  # Specify the view which handles logins
 principal = Principal(app)
 setup_security(app)
 
+
 def download_model():
     s3 = boto3.client('s3',
                       aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
@@ -45,16 +47,29 @@ def download_model():
     bucket_name = 'heroku_s3_access'
     object_key = 'sam_vit_b_01ec64.pth'
     this_path = os.path.dirname(os.path.abspath(__file__))
-    download_path = os.path.join(this_path, 'ai_model', 'sam_vit_b_01ec64.pth')
+    ai_model_path = os.path.join(this_path, 'ai_model')
 
-    s3.download_file(bucket_name, object_key, download_path)
+    # Ensure the AI model directory exists
+    os.makedirs(ai_model_path, exist_ok=True)
+
+    this_path = os.path.dirname(os.path.abspath(__file__))
+    download_path = os.path.join(ai_model_path, 'sam_vit_b_01ec64.pth')
+
+    try:
+        s3.download_file(bucket_name, object_key, download_path)
+        logging.info("Model downloaded successfully")
+    except Exception as e:
+        logging.error(f"Failed to download model: {e}")
+
+
+# Download the model file
+download_model()
 
 # Initialize roles
 with app.app_context():
     # if the db has not been created, create it
     db.create_all()
     init_roles()
-
 
 # Ensure the upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -80,6 +95,8 @@ def role_required(e: PermissionDenied):
             required_role = 'admin'
 
     return jsonify(error=f"You need to be a {required_role} role to do that"), 403
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -96,12 +113,14 @@ def login():
             flash(output_message, 'error')
     return render_template('login.html')
 
+
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     flash('You have been logged out.')
     return redirect(url_for('login'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -141,6 +160,7 @@ def index():
     else:
         roles_list = 'No roles'
     return render_template('index.html', roles_list=roles_list)
+
 
 @app.route('/get-image/<int:image_id>', methods=['GET'])
 def get_image(image_id):
