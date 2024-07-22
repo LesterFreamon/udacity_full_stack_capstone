@@ -2,6 +2,7 @@ from datetime import datetime  # Correct import statement
 import os
 import logging
 
+import boto3
 import cv2
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify, render_template, send_from_directory, url_for, redirect, flash
@@ -36,6 +37,17 @@ login_manager.login_view = '/login'  # Specify the view which handles logins
 
 principal = Principal(app)
 setup_security(app)
+
+def download_model():
+    s3 = boto3.client('s3',
+                      aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+    bucket_name = 'heroku_s3_access'
+    object_key = 'sam_vit_b_01ec64.pth'
+    this_path = os.path.dirname(os.path.abspath(__file__))
+    download_path = os.path.join(this_path, 'ai_model', 'sam_vit_b_01ec64.pth')
+
+    s3.download_file(bucket_name, object_key, download_path)
 
 # Initialize roles
 with app.app_context():
