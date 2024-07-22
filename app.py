@@ -43,8 +43,9 @@ setup_security(app)
 def download_model():
     s3 = boto3.client('s3',
                       aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
-    bucket_name = 'heroku_s3_access'
+                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                      region_name='us-east-1')
+    bucket_name = 'ai-sam-models'
     object_key = 'sam_vit_b_01ec64.pth'
     this_path = os.path.dirname(os.path.abspath(__file__))
     ai_model_path = os.path.join(this_path, 'ai_model')
@@ -52,7 +53,6 @@ def download_model():
     # Ensure the AI model directory exists
     os.makedirs(ai_model_path, exist_ok=True)
 
-    this_path = os.path.dirname(os.path.abspath(__file__))
     download_path = os.path.join(ai_model_path, 'sam_vit_b_01ec64.pth')
 
     try:
