@@ -41,25 +41,31 @@ setup_security(app)
 
 
 def download_model():
-    s3 = boto3.client('s3',
-                      aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                      aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-                      region_name='us-east-1')
-    bucket_name = 'ai-sam-models'
-    object_key = 'sam_vit_b_01ec64.pth'
+    logging.info("Downloading model")
     this_path = os.path.dirname(os.path.abspath(__file__))
     ai_model_path = os.path.join(this_path, 'ai_model')
+    object_key = 'sam_vit_b_01ec64.pth'
 
-    # Ensure the AI model directory exists
-    os.makedirs(ai_model_path, exist_ok=True)
 
-    download_path = os.path.join(ai_model_path, 'sam_vit_b_01ec64.pth')
+    # check if the model already exists
+    if os.path.exists(os.path.join(ai_model_path, object_key)):
+        logging.info("Model already exists")
+    else:
+        logging.info("Model does not exist")
+        s3 = boto3.client('s3',
+                          aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                          aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                          region_name='us-east-1')
+        bucket_name = 'ai-sam-models'
+        # Ensure the AI model directory exists
+        os.makedirs(ai_model_path, exist_ok=True)
+        download_path = os.path.join(ai_model_path, 'sam_vit_b_01ec64.pth')
 
-    try:
-        s3.download_file(bucket_name, object_key, download_path)
-        logging.info("Model downloaded successfully")
-    except Exception as e:
-        logging.error(f"Failed to download model: {e}")
+        try:
+            s3.download_file(bucket_name, object_key, download_path)
+            logging.info("Model downloaded successfully")
+        except Exception as e:
+            logging.error(f"Failed to download model: {e}")
 
 
 # Download the model file
@@ -82,7 +88,8 @@ mask_generator = SamAutomaticMaskGenerator(sam_model)
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.get(user_id)
+    # Ensure the user and their roles are loaded correctly
+    return User.query.get(int(user_id))
 
 
 @app.errorhandler(403)
@@ -130,15 +137,17 @@ def register():
         role_name = request.form['role']  # Assuming role name is passed from form
 
         # Check if user exists
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists!')
-            return render_template('register.html')
+        existing_user = User.query.filter_by(username=username).first()
 
-        # Check for role and create user with roles
+        if existing_user:
+            flash('Username already exists!', 'error')
+            return redirect(url_for('register'))
+
+            # Check for role and create user with roles
         role = Role.query.filter_by(name=role_name).first()
         if not role:
             flash(f'Role {role_name} not found!', 'error')
-            return render_template('register.html')
+            return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password)
         new_user = User(username=username, password=hashed_password, roles=[role])

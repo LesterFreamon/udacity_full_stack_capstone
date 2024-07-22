@@ -1,7 +1,8 @@
+import os
 class Config:
     UPLOAD_FOLDER = 'data/uploads/'
     PROCESSED_FOLDER = 'data/segments/'
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///site.db'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///site.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MODEL_TYPE = "vit_b"
     CHECKPOINT_PATH = "ai_model/sam_vit_b_01ec64.pth"
