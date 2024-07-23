@@ -4,9 +4,9 @@ from flask_login import UserMixin
 
 db = SQLAlchemy()
 
-# Association table for many-to-many relationship between Users and Roles
+# Association table for many-to-many relationship between AppUsers and Roles
 user_roles = db.Table('user_roles',
-                      db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+                      db.Column('appuser_id', db.Integer, db.ForeignKey('app_user.id'), primary_key=True),
                       db.Column('role_id', db.Integer, db.ForeignKey('role.id'), primary_key=True)
                       )
 
@@ -19,18 +19,18 @@ class Role(db.Model):
         return f'<Role {self.name}>'
 
 
-class User(UserMixin, db.Model):
+class AppUser(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
-    roles = db.relationship('Role', secondary=user_roles, backref=db.backref('users', lazy='dynamic'))
+    password = db.Column(db.String(300))
+    roles = db.relationship('Role', secondary=user_roles, backref=db.backref('app_users', lazy='dynamic'))
 
     @classmethod
     def get(cls, user_id):
         return cls.query.get(int(user_id))
 
     def __repr__(self):
-        return f'<User {self.username}>'
+        return f'<AppUser {self.username}>'
 
 
 class Image(db.Model):

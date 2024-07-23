@@ -13,7 +13,7 @@ from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import Config
-from models import db, Image, ImageSegment, User, Role, init_roles  # Import db and Image from models.py
+from models import db, Image, ImageSegment, AppUser, Role, init_roles  # Import db and Image from models.py
 from auth import setup_security, admin_permission, \
     admin_or_user_permission  # Import setup_security and permissions from auth.py
 from utils import create_segmentation_layer, create_rgba_image, combine_two_images
@@ -89,7 +89,7 @@ mask_generator = SamAutomaticMaskGenerator(sam_model)
 @login_manager.user_loader
 def load_user(user_id):
     # Ensure the user and their roles are loaded correctly
-    return User.query.get(int(user_id))
+    return AppUser.query.get(int(user_id))
 
 
 @app.errorhandler(403)
@@ -109,7 +109,7 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        user = User.query.filter_by(username=username).first()
+        user = AppUser.query.filter_by(username=username).first()
         if user and check_password_hash(user.password, password):
             logging.info("User logged in")
             login_user(user)
@@ -137,7 +137,7 @@ def register():
         role_name = request.form['role']  # Assuming role name is passed from form
 
         # Check if user exists
-        existing_user = User.query.filter_by(username=username).first()
+        existing_user = AppUser.query.filter_by(username=username).first()
 
         if existing_user:
             flash('Username already exists!', 'error')
@@ -150,7 +150,7 @@ def register():
             return redirect(url_for('register'))
 
         hashed_password = generate_password_hash(password)
-        new_user = User(username=username, password=hashed_password, roles=[role])
+        new_user = AppUser(username=username, password=hashed_password, roles=[role])
         db.session.add(new_user)
         db.session.commit()
 
@@ -352,4 +352,5 @@ def apply_sam(image_id):
 # Make sure to call this function in an application context
 # For example, if running in a Flask shell, just call print_constraints()
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))  # Default to 5000 if no PORT variable is set
+    app.run(host='0.0.0.0', port=port, debug=True)

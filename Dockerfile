@@ -10,15 +10,19 @@ RUN apt-get update && apt-get install -y \
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+# Copy only the requirements.txt first to leverage Docker cache
+COPY requirements.txt /app/
+
 
 # Install any needed packages specified in requirements.txt
 RUN pip install -r requirements.txt
+
+# Copy the current directory contents into the container at /app
+COPY . /app
 
 # Make port available to the world outside this container
 EXPOSE 5000
 
 
 # Run app.py when the container launches
-CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:$PORT"]
+CMD gunicorn app:app --bind 0.0.0.0:$PORT
