@@ -22,7 +22,7 @@ class Role(db.Model):
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
+    password = db.Column(db.String(300))
     roles = db.relationship('Role', secondary=user_roles, backref=db.backref('users', lazy='dynamic'))
 
     @classmethod
