@@ -1,8 +1,18 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()  # This loads the env variables from .env file
+
 class Config:
     UPLOAD_FOLDER = 'images/uploads/'
     PROCESSED_FOLDER = 'images/segments/'
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///site.db')
+    SECURITY_REGISTERABLE = True
+    SECURITY_CONFIRMABLE = True
+    HOSTNAME = os.environ.get('HOSTNAME', 'localhost')
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    DB_USERNAME = os.environ.get('DB_USERNAME')
+    DB_PASSWORD = os.environ.get('DB_PASSWORD')
+    DB_PORT = os.environ.get('DB_PORT')
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', f'postgresql://{DB_USERNAME}:{DB_PASSWORD}@{HOSTNAME}:{DB_PORT}/postgres')
     if SQLALCHEMY_DATABASE_URI.startswith("postgres://"):
         SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace("postgres://", "postgresql://", 1)
     SQLALCHEMY_TRACK_MODIFICATIONS = False

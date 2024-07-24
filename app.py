@@ -34,9 +34,6 @@ load_dotenv()
 app = Flask(__name__)
 
 app.config.from_object(Config)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-app.config['SECURITY_REGISTERABLE'] = True  # Enable registration
-app.config['SECURITY_CONFIRMABLE'] = True  # If you want email confirmation
 
 db.init_app(app)  # Initialize db with the app
 migrate = Migrate(app, db)
