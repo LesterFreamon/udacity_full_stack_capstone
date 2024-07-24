@@ -1,68 +1,73 @@
 from datetime import datetime  # Correct import statement
 import os
 import logging
+from io import BytesIO
 
+import base64
 import boto3
 import cv2
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template, send_from_directory, url_for, redirect, flash
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask_migrate import Migrate
-from flask_principal import Principal, PermissionDenied
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
-from werkzeug.security import check_password_hash, generate_password_hash
 
+from dotenv import load_dotenv
+from flask import jsonify
+from flask_security import (
+    roles_required, SQLAlchemyUserDatastore, Security, current_user, login_user, url_for_security, roles_accepted
+)
+from werkzeug.security import generate_password_hash
+from flask_security.signals import user_registered
+
+import numpy as np
+from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+
+from flask import Flask, render_template, redirect, url_for, flash, request
+from flask_migrate import Migrate
+from aws_utils import upload_file_to_s3, download_file_from_s3, delete_file_from_s3
 from config import Config
 from models import db, Image, ImageSegment, AppUser, Role, init_roles  # Import db and Image from models.py
-from auth import setup_security, admin_permission, \
-    admin_or_user_permission  # Import setup_security and permissions from auth.py
 from utils import create_segmentation_layer, create_rgba_image, combine_two_images
+from werkzeug.security import check_password_hash
 
 # add logger
 logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
-MAX_IMAGES = 10
 app = Flask(__name__)
+
 app.config.from_object(Config)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
-setup_security(app)
+app.config['SECURITY_REGISTERABLE'] = True  # Enable registration
+app.config['SECURITY_CONFIRMABLE'] = True  # If you want email confirmation
 
 db.init_app(app)  # Initialize db with the app
 migrate = Migrate(app, db)
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = '/login'  # Specify the view which handles logins
+user_datastore = SQLAlchemyUserDatastore(db, AppUser, Role)
+security = Security(app, user_datastore)
 
-principal = Principal(app)
-setup_security(app)
+s3_client = boto3.client('s3',
+                         aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                         aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                         region_name='us-east-1')
 
 
 def download_model():
+    """Download the model from S3 if it does not exist locally."""
     logging.info("Downloading model")
     this_path = os.path.dirname(os.path.abspath(__file__))
     ai_model_path = os.path.join(this_path, 'ai_model')
     object_key = 'sam_vit_b_01ec64.pth'
-
 
     # check if the model already exists
     if os.path.exists(os.path.join(ai_model_path, object_key)):
         logging.info("Model already exists")
     else:
         logging.info("Model does not exist")
-        s3 = boto3.client('s3',
-                          aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                          aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-                          region_name='us-east-1')
-        bucket_name = 'ai-sam-models'
         # Ensure the AI model directory exists
         os.makedirs(ai_model_path, exist_ok=True)
         download_path = os.path.join(ai_model_path, 'sam_vit_b_01ec64.pth')
 
         try:
-            s3.download_file(bucket_name, object_key, download_path)
+            s3_client.download_file(app.config['BUCKET_NAME'], object_key, download_path)
             logging.info("Model downloaded successfully")
         except Exception as e:
             logging.error(f"Failed to download model: {e}")
@@ -85,94 +90,78 @@ os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
 sam_model = sam_model_registry[app.config['MODEL_TYPE']](checkpoint=app.config['CHECKPOINT_PATH'])
 mask_generator = SamAutomaticMaskGenerator(sam_model)
 
-
-@login_manager.user_loader
-def load_user(user_id):
-    # Ensure the user and their roles are loaded correctly
-    return AppUser.query.get(int(user_id))
-
-
-@app.errorhandler(403)
-def role_required(e: PermissionDenied):
-    # Custom message depending on the endpoint or required role
-    logging.error(f"Permission denied: {e}")
-    required_role = 'user'  # Customize as necessary
-    for need in e.description.needs:
-        if need.value == 'admin':
-            required_role = 'admin'
-
-    return jsonify(error=f"You need to be a {required_role} role to do that"), 403
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = AppUser.query.filter_by(username=username).first()
-        if user and check_password_hash(user.password, password):
-            logging.info("User logged in")
-            login_user(user)
-            return redirect(url_for('index'))
-        else:
-            output_message = "Wrong username or password"
-            logging.error(output_message)
-            flash(output_message, 'error')
-    return render_template('login.html')
-
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('You have been logged out.')
-    return redirect(url_for('login'))
-
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        role_name = request.form['role']  # Assuming role name is passed from form
-
-        # Check if user exists
-        existing_user = AppUser.query.filter_by(username=username).first()
-
-        if existing_user:
-            flash('Username already exists!', 'error')
-            return redirect(url_for('register'))
-
-            # Check for role and create user with roles
-        role = Role.query.filter_by(name=role_name).first()
-        if not role:
-            flash(f'Role {role_name} not found!', 'error')
-            return redirect(url_for('register'))
-
-        hashed_password = generate_password_hash(password)
-        new_user = AppUser(username=username, password=hashed_password, roles=[role])
-        db.session.add(new_user)
-        db.session.commit()
-
-        login_user(new_user)
-
-        flash('User has been registered!')
-        return redirect(url_for('index'))  # Redirect to the homepage or dashboard
-
-    return render_template('register.html')
+user_registered.connect_via(app)
 
 
 @app.route('/')
 def index():
-    if current_user.is_authenticated:
-        roles_list = ', '.join([role.name for role in current_user.roles])
-    else:
-        roles_list = 'No roles'
-    return render_template('index.html', roles_list=roles_list)
+    return render_template('index.html', user=current_user)
 
 
-@app.route('/get-image/<int:image_id>', methods=['GET'])
-def get_image(image_id):
+@app.route('/custom_register', methods=['GET', 'POST'])
+def custom_register():
+    if request.method == 'POST':
+        form_data = request.form
+        username = form_data.get('username')
+        password = form_data.get('password')
+        role_name = form_data.get('role')
+
+        existing_user = AppUser.query.filter_by(username=username).first()
+        if existing_user:
+            flash('Username already exists!', 'error')
+            return redirect(url_for('custom_register'))
+
+        role = Role.query.filter_by(name=role_name).first()
+        if not role:
+            flash(f'Role {role_name} not found!', 'error')
+            return redirect(url_for('custom_register'))
+
+        hashed_password = generate_password_hash(password)
+        new_user = user_datastore.create_user(username=username, password=hashed_password, roles=[role])
+        db.session.add(new_user)
+        db.session.commit()
+
+        # Log in the new user
+        login_user(new_user)
+
+        flash('User has been registered!')
+        return redirect(url_for('index'))
+
+    return render_template('security/register_user.html')
+
+@app.route('/custom_login', methods=['POST'])
+def custom_login():
+
+    username = request.form.get('username')
+    password = request.form.get('password')
+
+
+    if not username or not password:
+        flash('Username or password cannot be empty')
+        return redirect(url_for_security('login'))
+
+    existing_user = AppUser.query.filter_by(username=username).first()
+
+    if existing_user and check_password_hash(existing_user.password, password):
+        login_user(existing_user)
+        return redirect(url_for('index'))  # Redirect to a secure page after login
+
+    flash('Invalid username or password')
+    return redirect(url_for_security('login'))
+
+@user_registered.connect_via(app)
+def user_registered_sighandler(sender, user, confirm_token):
+    logging.info("User registered")
+    role_name = request.form['role']
+    role = Role.query.filter_by(name=role_name).first()
+    if role:
+        user_datastore.add_role_to_user(user, role)
+        db.session.commit()
+    return render_template('register.html')
+
+
+@app.route('/get-image-data-from-id/<int:image_id>', methods=['GET'])
+def get_image_data_id(image_id):
     image = Image.query.get(image_id)
     if not image:
         return jsonify({'error': 'Image not found'}), 404
@@ -184,10 +173,41 @@ def get_image(image_id):
 
     response = {
         'id': image.id,
-        'original': image.filename,
+        'original': image.filepath,
         'segmented': processed_filename
     }
     return jsonify(response), 200
+
+
+@app.route('/get-image/<path:filename>', methods=['GET'])
+def get_image(filename):
+    logging.info(current_user.roles)
+
+    try:
+        # Download the file from S3
+        logging.info("Downloading file from S3")
+        file = download_file_from_s3(s3_client, filename, app.config['BUCKET_NAME'])
+        logging.info("File downloaded successfully")
+
+        # Encode the file in Base64
+        base64_encoded_data = base64.b64encode(file.getvalue()).decode('utf-8')
+        image_data = f"data:image/jpeg;base64,{base64_encoded_data}"
+
+        # Prepare metadata
+        metadata = s3_client.head_object(Bucket=app.config['BUCKET_NAME'], Key=filename)
+        logging.info("Metadata fetched successfully")
+        content_type = metadata['ContentType']
+        size = metadata['ContentLength']
+
+        response = {
+            'filename': filename,
+            'imageData': image_data,
+            'contentType': content_type,
+            'size': size
+        }
+        return jsonify(response), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/get-image-list', methods=['GET'])
@@ -213,7 +233,7 @@ def get_image_list():
 
 
 @app.route('/delete-image/<int:image_id>', methods=['DELETE'])
-@admin_permission.require(http_exception=403)  # Enforce admin permissions
+@roles_required('admin')  # Requires that the currently logged-in user has the 'admin' role
 def delete_image(image_id):
     # Find the image and its segment
     image = Image.query.get(image_id)
@@ -226,11 +246,16 @@ def delete_image(image_id):
 
     image_segment = ImageSegment.query.filter_by(image_id=image_id).first()
 
-    # Delete image files from filesystem
+    # Delete image files from S3
     try:
-        os.remove(os.path.join(app.config['UPLOAD_FOLDER'], image.filename))
+        error = delete_file_from_s3(s3_client, image.filepath, app.config['BUCKET_NAME'])
+        if error:
+            return jsonify({'error': error}), 500
+
         if image_segment and image_segment.processed_filename:
-            os.remove(os.path.join(app.config['PROCESSED_FOLDER'], image_segment.processed_filename))
+            error = delete_file_from_s3(s3_client, image_segment.processed_filename, app.config['BUCKET_NAME'])
+            if error:
+                return jsonify({'error': error}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -238,27 +263,26 @@ def delete_image(image_id):
 
 
 @app.route('/upload', methods=['POST'])
-@admin_or_user_permission.require(http_exception=403)
+@roles_accepted('user', 'admin')
 def upload_image():
+    logging.info("upload-image")
     file = request.files['image']
     if file:
-        # Ensure only MAX_IMAGES images are stored, handle the oldest if more
-        if Image.query.filter_by(active=True).count() >= MAX_IMAGES:
-            oldest_image = Image.query.filter_by(active=True).order_by(Image.timestamp).first()
-            oldest_image_id = oldest_image.id
-            delete_image(oldest_image_id)
+        logging.info("File received")
 
         timestamp = datetime.utcnow().isoformat()
         filename = f"{timestamp}-{file.filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+
+        logging.info("Uploading file to S3")
+
+        file_url = upload_file_to_s3(s3_client, file, filepath, app.config['BUCKET_NAME'])
+
+        logging.info("File uploaded to S3 successfully to %s", file_url)
 
         new_image = Image(filename=filename, filepath=filepath)
         db.session.add(new_image)
         db.session.commit()
-
-        # Generate a URL for the uploaded file
-        file_url = url_for('uploaded_file', filename=filename, _external=True)
 
         response = {
             'id': new_image.id,
@@ -273,38 +297,32 @@ def upload_image():
     return jsonify({'error': 'No file provided'}), 400
 
 
-@app.route('/uploads/<path:filename>')
-def uploaded_file(filename):
-    if 'combined' in filename:
-        return send_from_directory(app.config['PROCESSED_FOLDER'], filename)
-    else:
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-
 @app.route('/apply-sam/<int:image_id>', methods=['GET'])
-@admin_or_user_permission.require(http_exception=403)
+@roles_accepted('user', 'admin')
 def apply_sam(image_id):
     logging.info("apply-sam")
     image = Image.query.get(image_id)
     if image.active:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+
+        file_obj = download_file_from_s3(s3_client, image.filepath, app.config['BUCKET_NAME'])
 
         # Check if the file exists to avoid errors
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'File not found'}), 404
+        if file_obj is None:
+            return jsonify({'error': 'File not found in S3'}), 404
 
         # Open the image using OpenCV
-        original_image = cv2.imread(file_path)
+        file_bytes = np.asarray(bytearray(file_obj.read()), dtype=np.uint8)
+        original_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
         if original_image is None:
             return jsonify({'error': 'Error opening image file'}), 500
 
-        # delete previous segment data
+        # delete previous segment images
         ImageSegment.query.filter_by(image_id=image_id).delete()
         db.session.commit()
 
         # Convert image to RGB if necessary (OpenCV loads in BGR)
         original_image_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-
         logging.info("Image opened successfully")
 
         # Apply the SAM model to get the mask
@@ -325,23 +343,28 @@ def apply_sam(image_id):
 
         combined_image = combine_two_images(rgba_image, masked_image)
 
-        # Save the combined image
-        processed_filename = f"combined-{os.path.basename(file_path)}"
-        processed_path = os.path.join(app.config['PROCESSED_FOLDER'], processed_filename)
-        cv2.imwrite(processed_path, cv2.cvtColor(combined_image, cv2.COLOR_RGB2BGR))  # Save in BGR format
+        # Save the combined image to a BytesIO object
+        _, img_encoded = cv2.imencode('.jpg', cv2.cvtColor(combined_image, cv2.COLOR_RGB2BGR))
+        img_io = BytesIO(img_encoded)
 
-        logging.info("Masked image saved successfully")
+        # Create a filename and upload to S3
+        timestamp = datetime.utcnow().isoformat()
+        processed_filename = f"combined-{timestamp}.jpg"
+        filepath = os.path.join(app.config['PROCESSED_FOLDER'], processed_filename)
 
-        file_url = url_for('uploaded_file', filename=processed_filename, _external=True)
+        img_io.seek(0)  # Seek to the start of the BytesIO object
 
-        # Store segment data
+        file_url = upload_file_to_s3(s3_client, img_io, filepath, app.config['BUCKET_NAME'])
+        logging.info("Masked image uploaded to S3 successfully")
+
+        # Store segment images
         new_segment = ImageSegment(
-            image_id=Image.query.filter_by(filename=os.path.basename(file_path)).first().id,
-            processed_filename=processed_filename,
+            image_id=image.id,
+            processed_filename=filepath,
             num_segments=len(masks_info)
         )
 
-        logging.info("Segment data stored successfully")
+        logging.info("Segment images stored successfully")
         db.session.add(new_segment)
         db.session.commit()
 

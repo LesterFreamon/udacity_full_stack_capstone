@@ -87,8 +87,8 @@ This project is a web application that allows users to upload images and apply M
    ```bash
    SECRET_KEY=your_secret_key
    SQLALCHEMY_DATABASE_URI=sqlite:///instance/site.db
-   UPLOAD_FOLDER=data/uploads
-   PROCESSED_FOLDER=data/segments
+   UPLOAD_FOLDER=images/uploads
+   PROCESSED_FOLDER=images/segments
    MODEL_TYPE=sam_vit_b
    CHECKPOINT_PATH=ai_model/sam_vit_b_01ec64.pth
     ```

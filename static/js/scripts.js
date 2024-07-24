@@ -1,15 +1,27 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // Handle file selection and drop events
     let dropArea = document.getElementById('drop-area');
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-        eventName === 'dragover' ? dropArea.classList.add('hover') : dropArea.classList.remove('hover');
-    });
-    dropArea.addEventListener('drop', handleDrop, false);
+    if (dropArea) {
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+            if (eventName === 'dragover') {
+                dropArea.classList.add('hover');
+            } else {
+                dropArea.classList.remove('hover');
+            }
+        });
+        dropArea.addEventListener('drop', handleDrop, false);
+        console.log('Drop area ready for interaction.');
+    } else {
+        console.log('Drop area element not found on this page.');
+    }
 
-    // Initialize image dropdown
     const imageDropdown = document.getElementById('imageDropdown');
-    imageDropdown.addEventListener('click', loadImages);
+    if (imageDropdown) {
+        imageDropdown.addEventListener('click', loadImages);
+        console.log('Image dropdown ready for interaction.');
+    } else {
+        console.log('Image dropdown element not found on this page.');
+    }
 });
 
 function preventDefaults(e) {
@@ -26,11 +38,13 @@ function handleDrop(e) {
 function handleFiles(files) {
     ([...files]).forEach(uploadFile);
 }
+
 function handleForbiddenResponse(response) {
     return response.json().then(data => {
         alert(data.error);  // Display the custom error message from server
     });
 }
+
 function cleanGallery() {
     const originalGallery = document.getElementById('original-gallery');
     const segmentedGallery = document.getElementById('segmented-gallery');
@@ -48,7 +62,6 @@ function cleanGallery() {
 
 }
 
-
 function uploadFile(file) {
     let formData = new FormData();
     formData.append('image', file);
@@ -57,38 +70,46 @@ function uploadFile(file) {
         method: 'POST',
         body: formData
     })
-        .then(response => {
+    .then(response => {
             if (!response.ok) {
                 if (response.status === 403) {
-                    return handleForbiddenResponse(response);
+                   alert("you do not have the proper permissions"); // Only show alert if there's an error
                 }
                 throw new Error('Network response was not ok.');
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.url) {
-                cleanGallery(); // Clear existing images
-                displayImage(data.filename, 'original-gallery'); // Display the original image
-            } else {
-                console.error('Error uploading image:', data.error);
+            else {
+                return response;
             }
         })
-        .catch(error => console.error('Error uploading image:', error));
+    .then(data => {
+        // Assuming `data.filename` contains the filename of the uploaded image
+        if (!data.filename) {
+            throw new Error('Filename not provided in the upload response');
+        }
+        // Use FileReader to read the file and display it
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            cleanGallery(); // Clear existing images
+            displayImage(e.target.result, 'original-gallery'); // Display the original image using result from FileReader
+        };
+        reader.onerror = function() {
+            console.error('Error reading file.');
+        };
+        reader.readAsDataURL(file); // This reads the file as a data URL encoding of the base64 image
+    })
+    .catch(error => console.error('Error during upload:', error));
 }
 
-function displayImage(imageUrl, galleryId) {
+function displayImage(imageData, galleryId) {
     let gallery = document.getElementById(galleryId);
     let imgContainer = document.createElement('div');
     imgContainer.className = 'image-container';
-
     let img = document.createElement('img');
     // check if imageUrl is null
-
-    if (!imageUrl) {
-        img.src = 'static/images/no_image_available.png'
+    if (!imageData) {
+        img.src = 'static/images/no_image_available.png';
     } else {
-        img.src = `/uploads/${imageUrl}`;
+        img.src = imageData;
     }
     imgContainer.appendChild(img);
     gallery.appendChild(imgContainer);
@@ -97,6 +118,17 @@ function displayImage(imageUrl, galleryId) {
 
 function loadImages() {
     fetch('/get-image-list')
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                   alert("you do not have the proper permissions"); // Only show alert if there's an error
+                }
+                throw new Error('Network response was not ok.');
+            }
+            else {
+                return response;
+            }
+        })
         .then(response => response.json())
         .then(images => {
             const dropdown = document.getElementById('imageDropdown');
@@ -115,20 +147,36 @@ function showSelectedImage() {
         alert('Please select an image to view.');
         return;
     }
-    cleanGallery();
-    // Assuming you have an endpoint to fetch an image by ID
-    fetch(`/get-image/${imageId}`)
+    cleanGallery();  // Assuming this function clears the display area
+    // Fetching metadata first
+    fetch(`/get-image-data-from-id/${imageId}`)
         .then(response => response.json())
         .then(data => {
-            // Display the selected original image
-            displayImage(data.original, 'original-gallery');
+            if (!data.original && !data.segmented) {
+                throw new Error('No images available');
+            }
+            // If there's an original image, fetch and display it
+            if (data.original) {
+                fetchAndDisplayImage(data.original, 'original-gallery');
+            }
+            // If there's a segmented image, fetch and display it
             if (data.segmented) {
-                displayImage(data.segmented, 'segmented-gallery');
-            } else {
+                fetchAndDisplayImage(data.segmented, 'segmented-gallery');
+            }
+            else {
                 displayImage(null, 'segmented-gallery');
             }
         })
         .catch(error => console.error('Error displaying image:', error));
+}
+
+function fetchAndDisplayImage(filename, galleryId) {
+    fetch(`/get-image/${filename}`)
+        .then(response => response.json())
+        .then(data => {
+            displayImage(data.imageData, galleryId);
+        })
+        .catch(error => console.error('Error fetching image data:', error));
 }
 
 function deleteSelectedImage() {
@@ -142,23 +190,25 @@ function deleteSelectedImage() {
         fetch(`/delete-image/${imageId}`, {
             method: 'DELETE'
         })
-            .then(response => {
-        if (!response.ok) {
-            if (response.status === 403) {
-                return handleForbiddenResponse(response);
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                   alert("you do not have the proper permissions"); // Only show alert if there's an error
+                }
             }
-            throw new Error('Network response was not ok.');
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Success:', data);
-    })
-    .catch(error => {
-        console.error('Error:', error);
-    });
+            else {
+                return response.json().then(data => {
+                    console.log('Success:', data); // Log success without alerting
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred: ' + error.message); // Alert any fetch or network errors
+        });
     }
 }
+
 
 function createLoader() {
     let loader = document.createElement('div');
@@ -178,6 +228,18 @@ function addLoader() {
 
 }
 
+function removeLoader() {
+    const segmentedGallery = document.getElementById('segmented-gallery');
+    let loader = document.querySelector('.loader');
+    if (loader) {
+        segmentedGallery.removeChild(loader);
+                // Clear the text
+
+        segmentedGallery.removeChild(segmentedGallery.lastChild);
+
+    }
+}
+
 function applySam() {
     // Display loader
     let imageId = document.getElementById('imageDropdown').value;
@@ -186,16 +248,18 @@ function applySam() {
         return;
     }
     addLoader();
-
     fetch(`/apply-sam/${imageId}`)
         .then(response => {
             if (!response.ok) {
                 if (response.status === 403) {
-                    return handleForbiddenResponse(response);
+                    removeLoader();
+                   alert("you do not have the proper permissions"); // Only show alert if there's an error
                 }
                 throw new Error('Network response was not ok.');
             }
-            return response.json();
+            else {
+                return response;
+            }
         })
         .then(data => {
             // Display the segmented image

@@ -10,9 +10,26 @@
     {% block head %}{% endblock %}
 </head>
 <body>
-    {% block content %}{% endblock %}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
+
+<header>
+    <nav class="navbar fixed-top navbar-expand-sm navbar-light bg-light">
+        <a class="navbar-brand" href="#">SAM Image Processor</a>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto col-6">
+                <li class="nav-item"><a class="nav-link"  href="{{ url_for('index') }}">Home</a></li>
+                {% if not current_user.is_authenticated %}
+                <li class="nav-item"><a class="nav-link" href="{{ url_for_security('login') }}">Login</a></li>
+                <li class="nav-item"><a class="nav-link" href="{{ url_for_security('register') }}">Register</a></li>
+                {% else %}
+                <li class="nav-item"><a class="nav-link" href="{{ url_for_security('logout') }}">Logout</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+</header>
+{% block content %}{% endblock %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
 
 </body>
 </html>
