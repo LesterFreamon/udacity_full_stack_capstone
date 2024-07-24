@@ -18,7 +18,7 @@ RUN pip install -r requirements.txt
 
 
 
-# Make port available to the world outside this container
+# Make port available to the world outside this container ok
 EXPOSE 5000
 
 
